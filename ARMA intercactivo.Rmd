@@ -1,0 +1,90 @@
+---
+title: "Olakase"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+```{r}
+library(ggplot2)
+library(ggthemes)
+library(scales)
+library(reshape2)
+library(dplyr)
+library(readxl)
+library(knitr)
+library(kableExtra)
+library(shiny)
+library(flexdashboard)
+```
+`r options(scipen=999, knitr.kable.NA = '')`
+Simulación
+=======================================================================
+```{r}
+###Proceso 1
+phi <- list()
+
+phi[[1]] <- c(-1.1, .18)
+phi[[2]] <- c(-1.1, -0.18)
+ti <- 500
+####Valores inciales de 0
+yt <- data.frame(esta = c(0, 0), noEsta = c(0, 0))
+
+for (t in 3:ti){
+  yt[t,1] <- sum(phi[[1]] * c(yt[t-1,1], yt[t-2,1])) + rnorm(1, 0, 1)
+  yt[t,2] <- sum(phi[[2]] * c(yt[t-1,2], yt[t-2,2])) + rnorm(1, 0, 1)
+}
+errorM3x1 <- matrix(c(1, 0, 0), 3)
+m3x3 <- matrix(c(1, -phi[[1]][1], -phi[[1]][2], -phi[[1]][1], 1-phi[[1]][2], -phi[[1]][1], -phi[[1]][2], 0, 1), 3, 3)
+gamma <- c(solve(m3x3,errorM3x1))
+m3x32 <- matrix(c(1, -phi[[2]][1], -phi[[2]][2], -phi[[2]][1], 1-phi[[2]][2], -phi[[2]][1], -phi[[2]][2], 0, 1), 3, 3)
+gamma2 <- c(solve(m3x32,errorM3x1))
+
+ggplot(yt, aes(x = as.numeric(row.names(yt)),y = noEsta))+
+  geom_line()
+ggplot(yt, aes(x = as.numeric(row.names(yt)),y = esta))+
+  geom_line()
+for (i in 4:20){
+  gamma[i]<-phi[[1]][1]*gamma[i-1] + phi[[1]][2]*gamma[i-2]  
+  gamma2[i]<-phi[[2]][1]*gamma[i-1] + phi[[2]][2]*gamma[i-2]  
+}
+gamma <- as.data.frame(gamma)
+gamma2 <- as.data.frame(gamma2)
+colnames(gamma) <- "Covariance"
+colnames(gamma2) <- "Covariance"
+gamma$index <- 1:length(gamma$Covariance)
+gamma2$index <- 1:length(gamma$Covariance)
+gamma["Correlation"] <- gamma$Covariance/gamma[1, "Covariance"]
+gamma2["Correlation"] <- gamma$Covariance/gamma[1, "Covariance"]
+```
+
+
+
+Cov/Corr
+=======================================================================
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+```{r}
+selectInput('proceso', "Choose process", c("gamma", "gamma2"))
+selectInput('x', "Choose metric", names(gamma[, !names(gamma) %in% c("index")]))
+```
+
+Outputs
+-----------------------------------------------------------------------
+```{r}
+selectedData <- reactive({
+  gamma[, c("index", input$x)]
+})
+renderPlot({
+  covcorr <- ggplot(selectedData(), aes_string(x = "index", y = input$x))+
+  geom_line()
+  print(covcorr)
+})
+```
+
+
+
+ggplot(gamma, aes_string(x = as.numeric(row.names(gamma)),y = Correlation))+
+  geom_line()

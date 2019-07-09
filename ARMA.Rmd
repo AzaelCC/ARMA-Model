@@ -1,0 +1,201 @@
+---
+title: "Procesos ARMA"
+author: 
+- "Azael Carrillo Cabrera"
+- "Profesor: Dr. Gustavo Cabrera González"
+output:
+  html_notebook: 
+    code_folding: hide
+---
+```{r}
+library(ggplot2)
+library(ggthemes)
+library(scales)
+library(reshape2)
+library(dplyr)
+library(readxl)
+library(knitr)
+library(kableExtra)
+```
+
+
+##Parte 1
+###1)DGP para los procesos siguientes, T = 500, valores iniciales de 0
+$1-1.1L+0.18L^{2}=0$  
+y  
+$1-1.1L-0.18L^{2}=0$
+
+```{r}
+###Proceso 1
+phi <- list()
+
+phi[[1]] <- c(-1.1, .18)
+phi[[2]] <- c(-1.1, -0.18)
+ti <- 500
+####Valores inciales de 0
+yt <- data.frame(esta = c(0, 0), noEsta = c(0, 0))
+
+for (t in 3:ti){
+  yt[t,"esta"] <- phi[[1]][1]*c(yt[t-1,1] + phi[[1]][2]*yt[t-2,1]) + rnorm(1, 0, 1)
+  yt[t, "noEsta"] <- phi[[2]][1]*c(yt[t-1,2] + phi[[2]][2]*yt[t-2,2]) + rnorm(1, 0, 1)
+}
+errorM3x1 <- matrix(c(1, 0, 0), 3)
+m3x3 <- matrix(c(1, -phi[[1]][1], -phi[[1]][2], -phi[[1]][1], 1-phi[[1]][2], -phi[[1]][1], -phi[[1]][2], 0, 1), 3, 3)
+gamma <- c(solve(m3x3,errorM3x1))
+for (i in 4:20){
+  gamma[i]<-phi[[1]][1]*gamma[i-1] + phi[[1]][2]*gamma[i-2]  
+  gamma2[i]<-phi[[2]][1]*gamma[i-1] + phi[[2]][2]*gamma[i-2]  
+}
+gamma <- as.data.frame(gamma)
+gamma2 <- as.data.frame(gamma2)
+colnames(gamma) <- "Covariance"
+colnames(gamma2) <- "Covariance"
+gamma$index <- 1:length(gamma$Covariance)
+gamma2$index <- 1:length(gamma$Covariance)
+gamma["Correlation"] <- gamma$Covariance/gamma[1, "Covariance"]
+gamma2["Correlation"] <- gamma$Covariance/gamma[1, "Covariance"]
+```
+
+
+####Proceso 1
+```{r}
+ggplot(yt, aes(x = as.numeric(row.names(yt)),y = esta))+
+  geom_line()
+ggplot(gamma, aes(x = as.numeric(row.names(gamma)),y = Covariance))+
+  geom_line()
+ggplot(gamma, aes(x = as.numeric(row.names(gamma)),y = Correlation))+
+  geom_line()
+```
+
+####Proceso 2
+```{r}
+ggplot(yt, aes(x = as.numeric(row.names(yt)),y = noEsta))+
+  geom_line()
+ggplot(gamma2, aes(x = as.numeric(row.names(gamma)),y = Covariance))+
+  geom_line()
+ggplot(gamma2, aes(x = as.numeric(row.names(gamma)),y = Correlation))+
+  geom_line()
+```
+
+##Parte 2
+###DGP, verificar estacionalidad (obtener roots)
+####MA(1) $u_t= \epsilon_t +\theta_1\epsilon_{t-1}$  
+$\theta_1=1.1$  
+$\epsilon \sim NIID(0, 1)$  
+```{r}
+ut <- data.frame(ma1 = rep(0, ti))
+thetaMA1 <- 1.1
+epsilon <- data.frame(ma1 = rnorm(500))
+for (t in 2:ti){
+  ut[t, "ma1"] <- thetaMA1*epsilon[t-1,"ma1"] + epsilon[t,"ma1"]
+}
+##ut["ma1"] <- arima.sim(model=list(ma=c(1.1, .2), order =c(0,0,2)), n=500)
+ggplot(ut, aes(y = ma1, x = seq_along(yt$esta)))+
+  geom_line()
+```
+
+####MA(2) $u_t= \epsilon_t +\theta_1\epsilon_{t-1}+\theta_2\epsilon_{t-2}$    
+$\theta_1=1.1$  
+$\theta_2=0.2$  
+$\epsilon \sim NIID(0, 1)$  
+```{r}
+ut$ma2 <- rep(0, ti)
+thetaMA2 <- c(1.1, 0.2)
+epsilon$ma2 <- rnorm(500)
+for (t in 3:ti){
+  ut[t, "ma2"] <- thetaMA2[1]*epsilon[t-1,"ma2"] + thetaMA2[2]*epsilon[t-2,"ma2"] + epsilon[t,"ma2"]
+}
+ggplot(ut, aes(y = ma2, x = seq_along(yt$esta)))+
+  geom_line()
+
+```
+
+####ARMA(1,2) $y_t=1+0.5y_{t-1}+u_t$  
+```{r}
+yt$arma12 <- rep(0, ti)
+ut$arma12 <- rep(0, ti)
+phiAR1 <- 0.5
+for (t in 3:ti){
+  ut[t, "arma12"] <- thetaMA2[1]*epsilon[t-1,"ma2"] + thetaMA2[2]*epsilon[t-2,"ma2"] + epsilon[t,"ma2"]
+}
+
+for (t in 2:ti) {
+  yt[t, "arma12"] <- 1 + phiAR1*yt[t-1, "arma12"] + ut[t, "arma12"]
+}
+ggplot(yt, aes(y = arma12, x = seq_along(yt$esta)))+
+  geom_line()
+```
+####ARMA(2,1) $y_t=1+0.3y_{t-1}+0.1y_{t-2}u_t$  
+```{r}
+yt$arma21 <- rep(0, ti)
+ut$arma21 <- rep(0, ti)
+phiAR2 <- c(0.3, 0.1)
+for (t in 2:ti){
+  ut[t, "arma21"] <- thetaMA1*epsilon[t-1,"ma1"] + epsilon[t,"ma1"]
+}
+for (t in 3:ti){
+  yt[t, "arma21"] <- 1 + phiAR2[1]*yt[t-1, "arma21"]+ phiAR2[2]*yt[t-2, "arma21"] + ut[t, "arma21"]
+}
+ggplot(yt, aes(y = arma21, x = seq_along(yt$esta)))+
+  geom_line()
+```
+
+####ARMA(2,2) $y_t=1+0.3y_{t-1}+0.1y_{t-2}u_t$  
+```{r}
+yt$arma22 <- rep(0, ti)
+ut$arma22 <- rep(0, ti)
+phiAR2 <- c(0.3, 0.1)
+for (t in 3:ti){
+  ut[t, "arma22"] <- thetaMA2[1]*epsilon[t-1,"ma2"] + thetaMA2[2]*epsilon[t-2,"ma2"] + epsilon[t,"ma2"]
+  yt[t, "arma22"] <- 1 + phiAR2[1]*yt[t-1, "arma22"]+ phiAR2[2]*yt[t-2, "arma22"] + ut[t, "arma22"]
+}
+ggplot(yt, aes(y = arma22, x = seq_along(yt$esta)))+
+  geom_line()
+       
+```
+
+
+##Parte 3  
+###DGP  
+####MA(1) $y_t = \epsilon_t + 0.8\epsilon_{t-1}$  
+```{r}
+ut <- data.frame(ma1.1 = rep(0, ti))
+thetaMA1.1 <- 0.8
+epsilon <- data.frame(ma1.1 = rnorm(500))
+for (t in 2:ti){
+  ut[t, "ma1.1"] <- thetaMA1.1*epsilon[t-1,"ma1.1"] + epsilon[t,"ma1.1"]
+}
+ggplot(ut, aes(y = ma1.1, x = seq_along(yt$esta)))+
+  geom_line()
+acf(ut["ma1.1"])
+```
+####MA(4)$y_t \epsilon_t - 0.6\epsilon_{t-1}+0.3\epsilon_{t-2}-0.5\epsilon_{t-3}+0.5\epsilon_{t-4}$  
+```{r}
+ut$ma4 <- rep(0, ti)
+thetaMA4 <- c(-0.6, 0.3, -0.5, 0.5)
+epsilon$ma4 <- rnorm(500)
+for (t in 5:ti){
+  ut[t, "ma4"] <- epsilon[t,"ma4"] + thetaMA4[1]*epsilon[t-1,"ma4"] + thetaMA4[2]*epsilon[t-2,"ma4"] + thetaMA4[3]*epsilon[t-3,"ma4"] + thetaMA4[4]*epsilon[t-4,"ma4"]
+}
+ggplot(ut, aes(y = ma4, x = seq_along(yt$esta)))+
+  geom_line()
+acf(ut["ma4"])
+```
+
+####AR(1) $y_t = 0.8y_{t-1}+\epsilon_t$  
+```{r}
+yt$ar1 <- rep(0, ti)
+phiAR1.1 <- 0.8
+for (t in 2:ti) {
+  yt[t, "ar1"] <- 1 + phiAR1.1*yt[t-1, "ar1"] + rnorm(1)
+}
+ggplot(yt, aes(y = arma12, x = seq_along(yt$esta)))+
+  geom_line()
+acf(yt["ar1"])
+```
+
+
+
+
+
+
